@@ -28,7 +28,9 @@ information from logs that contain data from multiple processes.
 == Installation
 
 1. Install the plugin or the gem
- # gem install custom_benchmarks
+   # ./script/plugin install git://github.com/tylerkovacs/custom_benchmarks.git (if running recent rails)
+   - OR -
+   # gem install custom_benchmarks
 
 == Simple Example: Logging the Process ID
 
