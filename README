@@ -1,0 +1,106 @@
+=Custom Benchmarks
+
+== About
+
+Custom Benchmarks allow you to easily log your own information to the
+rails log at the end of each request.  The standard rails summary log
+line looks like this:
+
+Completed in 5ms (View: 3, DB: 2) | 200 OK [http://zvm/]
+
+With custom_benchmarks, an additional line is added to the output that
+contains as many metrics as you like for each request.  e.g.,
+
+Completed in 5ms (View: 3, DB: 2) | 200 OK [http://zvm/]
+Finished WelcomeController#index in 0.08545 (11 reqs/sec) DB: 2 | PID: 30796 | Time: 1233202720 | 200 OK [http://zvm/]
+
+At present, this line appears in addition to the standard log line (described
+below) that starts with the "Completed in".  I was unable to replace the
+existing log line without incurring other side effects.
+
+Typically, the standard log line includes the latency associated with
+executing specific parts of a request.  In the example above, we have added a
+measurement of search latency.  But you can use Custom Benchmarks to add
+any information to the log line.  The example above also shows the ID of
+the process (PID) that served this request.  The PID is useful when parsing
+information from logs that contain data from multiple processes.
+
+== Installation
+
+1. Install the plugin or the gem
+ # gem install custom_benchmarks
+
+== Simple Example: Logging the Process ID
+
+To add the PID as a custom benchmark field, simply add a custom_benchmark
+line like the following to your ApplicationController:
+
+class ApplicationController < ActionController::Base
+  custom_benchmark {|runtime| " | PID: #{$$}" }
+  ...
+end
+
+Declare your custom_benchmark with a block that expects an input parameter
+called runtime.  runtime, which isn't used in this example, contains the
+overall latency of the entire request.  Later, we'll show you an example
+of using runtime to calculate percentage latency below.  custom_benchmark
+expects your block to return a string - which will be inserted in the
+log file immediate before the status (e.g., 200 OK [http://www.zvents.com/])
+
+== Complex Example: Logging Arbitrary Latency
+
+Let's say that your application includes a search function that is powered
+by Lucene.  Like SQL calls issued to a database, calls to Lucene can take
+a while so you want to log your search latency.
+
+The first step is to set up a mechanism that allows you to record your
+search latency for each request.  You can do that with something like this:
+
+class MySearch
+  @@latency = 0.0
+  cattr_accessor :latency
+
+  def run_search
+    @@latency = Benchmark::measure{
+      # execute the call to Lucene here
+    }.real
+  end
+
+  def self.get_timing_summary(runtime)
+    summary = " | Search: #{sprintf("%.5f",@@latency)} (#{sprintf("%d", (@@latency * 100) / runtime)}%)"
+    @@latency = 0.0
+    summary
+  end
+end
+
+The run_search method uses Benchmark::measure to record the latency of the
+search.  The get_timing_summary class method, which will be invoked by
+a custom_benchmark, returns a formatted string summarizing the search
+latency in absolute and percentage terms.  It also resets the value
+of @@latency to avoid affecting subsequent queries.
+
+Finally, we just need to add a custom_benchmark statement to the
+ApplicationController:
+
+custom_benchmark {|runtime| MySearch.get_timing_summary(runtime) }
+
+== Default Integrations: Adapters
+
+custom_benchmarks now ships with default integrations with external
+libraries.  The first, and only, integration (as of 0.0.3 release) is
+with MemCacheClient.  Following the instructions in 
+vendor/plugins/custom_benchmarks/init.rb to enable adapters.
+
+== Useful benchmarks
+
+Process ID:
+custom_benchmark {|runtime| "| PID: #{$$}" }
+
+Process size:
+custom_benchmark {|runtime| "| PSZ: #{`ps -o vsz -p #{$$}`.split("\n").last.to_i}" }
+
+Note: Forking a shell is relatively slow and expensive.  On operating systems
+that support /proc, process size can be read much more quickly with:
+
+  PROC_STATUS_REGEX = /VmSize:\s+(\d+).*VmRSS:\s+(\d+)/m
+  File.read("/proc/#{Process.pid}/status").scan(PROC_STATUS_REGEX).first

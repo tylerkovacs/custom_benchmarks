@@ -1,0 +1,8 @@
+0.0.2
+- filter perform_action chain execution so that custom code in
+  rescue_action_in_public is run properly.  ie., if you were using
+  rescue_action_in_public to generate email on an error, the 0.0.1
+  release would disable it.
+
+0.0.1
+- initial release
